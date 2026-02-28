@@ -41,6 +41,7 @@ import AWSServicesPanel from "./AWSServicesPanel";
 // import KMeansClusteringPanel from './KMeansClusteringPanel';
 import NDVIImagePanel from "./NDVIImagePanel";
 import RegionsListPanel from "./RegionsListPanel";
+import YieldPredictionPanel from "./YieldPredictionPanel";
 import CriticalAlertOverlay from "./CriticalAlertOverlay";
 import { ToastContainer, useToast } from "./ui/toast";
 
@@ -55,7 +56,8 @@ type ViewId =
 	| "logs"
 	| "aws"
 	| "ndvi"
-	| "regions";
+	| "regions"
+	| "yield";
 
 const TITLE_MAP: Record<ViewId, string> = {
 	map: "FLORO MONITORING MAP",
@@ -70,6 +72,7 @@ const TITLE_MAP: Record<ViewId, string> = {
 	// kmeans: 'K-MEANS CLUSTERING',
 	ndvi: "NDVI IMAGE ANALYSIS",
 	regions: "REGIONS LIST",
+	yield: "YIELD PREDICTION",
 };
 
 const ICON_MAP: Record<ViewId, string> = {
@@ -85,6 +88,7 @@ const ICON_MAP: Record<ViewId, string> = {
 	// kmeans: 'KMN',
 	ndvi: "NDV",
 	regions: "RGN",
+	yield: "Yield",
 };
 
 // Tab groups for organized layout
@@ -99,7 +103,7 @@ const TAB_GROUPS = {
 		title: "Analysis",
 		icon: BarChart3,
 		// views: ['kmeans', 'ndvi', 'aws'] as ViewId[],
-		views: ["ndvi", "aws"] as ViewId[],
+		views: ["ndvi", "aws", "yield"] as ViewId[],
 	},
 	operations: {
 		title: "Operations",
@@ -451,6 +455,17 @@ export default function MosaicLayout() {
 					<RegionsListPanel
 						selectedRegion={selectedRegion}
 						onRegionSelected={handleRegionSelected}
+					/>
+				);
+			case "yield":
+				return (
+					<YieldPredictionPanel
+						regionId={selectedRegion?.id || ""}
+						tileId={`S2_${selectedRegion?.latitude}_${selectedRegion?.longitude}`}
+						ndvi={0.5}
+						onPredictionComplete={() => {
+							showSuccess("Yield prediction completed successfully!");
+						}}
 					/>
 				);
 			default:

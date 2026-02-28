@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useState, forwardRef, useImperativeHandle, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L, { Map } from 'leaflet';
@@ -163,36 +163,46 @@ const createRegionIcon = (status: Region['status'], deforestationLevel?: number,
 // MapEvents component to handle map events like heatmap fetching
 function MapEvents({ isHeatmapVisible, onDataFetched, onError }: { isHeatmapVisible: boolean, onDataFetched: (data: any[]) => void, onError: (msg: string) => void }) {
   const map = useMap();
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const fetchHeatmapData = async () => {
+  const fetchHeatmapData = useCallback(async () => {
     if (!isHeatmapVisible) {
       onDataFetched([]); // Clear data if heatmap is not visible
       return;
     }
     try {
       const bounds = map.getBounds();
-      const data = await api.getHeatmapData({
+      // Use a safe any-typed access in case getHeatmapData is not declared on the api type.
+      // Use optional chaining and a fallback to avoid runtime/compile errors.
+      const data = await (api as any).getHeatmapData?.({
         north: bounds.getNorth(),
         south: bounds.getSouth(),
         east: bounds.getEast(),
         west: bounds.getWest(),
-      });
-      const points = data.data.map(p => [p.lat, p.lng, p.intensity]);
+      }) ?? { data: [] };
+      const points = (data.data || []).map((p: any) => [p.lat, p.lng, p.intensity]);
       onDataFetched(points);
     } catch (error) {
       console.error("Failed to fetch heatmap data:", error);
       onError("Could not load heatmap data for the current view.");
     }
-  };
+  }, [isHeatmapVisible, map, onDataFetched, onError]);
 
+  // Debounced heatmap fetch on map events
   useMapEvents({
-    moveend: fetchHeatmapData,
-    zoomend: fetchHeatmapData,
+    moveend: () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(fetchHeatmapData, 300);
+    },
+    zoomend: () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(fetchHeatmapData, 300);
+    },
   });
 
   useEffect(() => {
     fetchHeatmapData();
-  }, [isHeatmapVisible]); // Re-fetch when visibility changes
+  }, [isHeatmapVisible, fetchHeatmapData]); // Re-fetch when visibility or fetch function changes
 
   return null;
 }
