@@ -134,7 +134,7 @@ function AlertCard({ alert, onAcknowledge }: { alert: Alert; onAcknowledge: (id:
               <span className="text-2xl font-bold text-gray-900">
                 {parseFloat(alert.deforestationPercentage.toString()).toFixed(2)}%
               </span>
-              <span className="text-sm text-gray-600">deforestation detected</span>
+              <span className="text-sm text-gray-600">stress detected</span>
             </div>
             
             {/* Alert Message */}
@@ -241,7 +241,7 @@ export default function AlertsPanel() {
           <AlertCircle className="w-12 h-12 text-red-600" />
         </div>
         <h3 className="text-xl font-bold text-red-800 mb-2">Alert System Unavailable</h3>
-        <p className="text-red-600 mb-4">Unable to load forest monitoring alerts</p>
+        <p className="text-red-600 mb-4">Unable to load vegetation monitoring alerts</p>
         <p className="text-sm text-red-500">{error.message}</p>
         <Button 
           variant="outline" 
@@ -262,9 +262,9 @@ export default function AlertsPanel() {
           <ShieldCheck className="w-16 h-16 text-green-600" />
         </div>
         <div className="space-y-3">
-          <h3 className="text-2xl font-bold text-green-800">Forest Shield Active</h3>
+          <h3 className="text-2xl font-bold text-green-800">Floro Shield Active</h3>
           <p className="text-green-600 font-medium">All monitoring regions are secure</p>
-          <p className="text-sm text-green-500">No deforestation alerts detected</p>
+          <p className="text-sm text-green-500">No vegetation alerts detected</p>
         </div>
         <div className="mt-6 flex items-center gap-2 text-sm text-green-600">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />

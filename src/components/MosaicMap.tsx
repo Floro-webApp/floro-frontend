@@ -302,7 +302,7 @@ function DragCreateHandler({
   const createRegion = async (center: L.LatLng, radiusMeters: number) => {
     try {
       const radiusKm = Math.round(radiusMeters / 1000 * 10) / 10;
-      const regionName = `Forest Region near ${center.lat.toFixed(2)}, ${center.lng.toFixed(2)}`;
+      const regionName = `Vegetation Region near ${center.lat.toFixed(2)}, ${center.lng.toFixed(2)}`;
       
       const regionData: CreateRegionDto = {
         name: regionName,
@@ -844,7 +844,7 @@ const MosaicMap = forwardRef<Map, MosaicMapProps>(({
                     <div className={`px-4 py-3 border-b ${isSatelliteView ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
                       <div className="flex items-center justify-between">
                         <h3 className={`font-semibold text-sm ${isSatelliteView ? 'text-white' : 'text-gray-900'}`}>
-                          {ndviSelectionMode ? 'NDVI ANALYSIS TARGET' : 'FOREST REGION'}
+                          {ndviSelectionMode ? 'NDVI ANALYSIS TARGET' : 'VEGETATION REGION'}
                         </h3>
                         <div className={`px-2 py-1 text-xs font-medium rounded ${
                           region.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :

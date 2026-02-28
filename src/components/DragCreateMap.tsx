@@ -147,7 +147,7 @@ function DragCreateHandler({
   const createRegion = async (center: L.LatLng, radiusMeters: number) => {
     try {
       const radiusKm = Math.round(radiusMeters / 1000 * 10) / 10; // Round to 1 decimal place
-      const regionName = `Forest Region ${new Date().toISOString().slice(0, 10)}`;
+      const regionName = `Vegetation Region ${new Date().toISOString().slice(0, 10)}`;
       
       const regionData: CreateRegionDto = {
         name: regionName,
@@ -421,10 +421,10 @@ export default function DragCreateMap({ onRegionCreated }: DragCreateMapProps) {
               MAP
             </div>
             <h3 className="text-lg font-semibold text-[#0f1419] mb-2">No Monitoring Regions</h3>
-            <p className="text-[#687078] mb-4">Create your first forest monitoring region by clicking "Drag to Create" and drawing on the map.</p>
+            <p className="text-[#687078] mb-4">Create your first vegetation monitoring region by clicking "Drag to Create" and drawing on the map.</p>
             <div className="text-sm text-[#687078]">
               <div>• Click and drag to create circular regions</div>
-              <div>• Monitor deforestation in real-time</div>
+              <div>• Monitor vegetation stress in real-time</div>
               <div>• Set custom radius (0.1km - 50km)</div>
             </div>
           </div>
@@ -475,7 +475,7 @@ export default function DragCreateMap({ onRegionCreated }: DragCreateMapProps) {
                       <div><span className="font-medium">Status:</span> {region.status}</div>
                       <div><span className="font-medium">Radius:</span> {region.radiusKm} km</div>
                       {region.lastDeforestationPercentage && (
-                        <div><span className="font-medium">Deforestation:</span> {region.lastDeforestationPercentage}%</div>
+                        <div><span className="font-medium">vegetation stress:</span> {region.lastDeforestationPercentage}%</div>
                       )}
                     </div>
                   </div>
@@ -507,7 +507,7 @@ export default function DragCreateMap({ onRegionCreated }: DragCreateMapProps) {
               {editingRegion ? 'Edit Region' : 'Region Details'}
             </SheetTitle>
             <SheetDescription>
-              Configure monitoring settings for this forest region
+              Configure monitoring settings for this vegetation region
             </SheetDescription>
           </SheetHeader>
 
@@ -564,7 +564,7 @@ export default function DragCreateMap({ onRegionCreated }: DragCreateMapProps) {
                 <div><span className="font-medium">Coordinates:</span> {editingRegion.latitude.toFixed(4)}, {editingRegion.longitude.toFixed(4)}</div>
                 <div><span className="font-medium">Status:</span> {editingRegion.status}</div>
                 {editingRegion.lastDeforestationPercentage && (
-                  <div><span className="font-medium">Deforestation:</span> {editingRegion.lastDeforestationPercentage}%</div>
+                  <div><span className="font-medium">Vegetation stress:</span> {editingRegion.lastDeforestationPercentage}%</div>
                 )}
                 {editingRegion.lastAnalysis && (
                   <div><span className="font-medium">Last Analysis:</span> {new Date(editingRegion.lastAnalysis).toLocaleDateString()}</div>

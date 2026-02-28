@@ -663,7 +663,7 @@ export default function MosaicLayout() {
 					{/* GitHub Links */}
 					<div className="flex items-center gap-2">
 						<a
-							href="https://github.com/Vinay-Basargekar/floro-infrastructure"
+							href="https://github.com/FloroApp"
 							target="_blank"
 							rel="noopener noreferrer"
 							className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-[#687078] hover:text-[#0972d3] hover:bg-[#f8f9fa] rounded transition-colors border border-[#d5dbdb] hover:border-[#0972d3]"
@@ -673,7 +673,7 @@ export default function MosaicLayout() {
 							<span>Infrastructure</span>
 						</a>
 						<a
-							href="https://github.com/Vinay-Basargekar/floro-Frontend"
+							href="https://github.com/FloroApp"
 							target="_blank"
 							rel="noopener noreferrer"
 							className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-[#687078] hover:text-[#0972d3] hover:bg-[#f8f9fa] rounded transition-colors border border-[#d5dbdb] hover:border-[#0972d3]"

@@ -69,9 +69,9 @@ export default function MapToolbar({
         {isHeatmapVisible && <span className="ml-1 text-xs">●</span>}
       </button>
       
-      <span className={infoSpan}>
+      {/* <span className={infoSpan}>
         REGIONS: {regionCount}
-      </span>
+      </span> */}
     </div>
   );
 } 
