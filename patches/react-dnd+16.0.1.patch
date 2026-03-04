@@ -1,0 +1,13 @@
+diff --git a/dist/internals/wrapConnectorHooks.js b/dist/internals/wrapConnectorHooks.js
+--- a/dist/internals/wrapConnectorHooks.js
++++ b/dist/internals/wrapConnectorHooks.js
+@@ -53,7 +53,8 @@
+     }
+ }
+ function cloneWithRef(element, newRef) {
+-    const previousRef = element.ref;
++    // React 19: ref is now a regular prop (element.props.ref), not element.ref
++    const previousRef = element.props?.ref ?? element.ref;
+     invariant(typeof previousRef !== 'string', 'Cannot connect React DnD to an element with an existing string ref. ' + 'Please convert it to use a callback ref instead, or wrap it into a <span> or <div>. ' + 'Read more: https://reactjs.org/docs/refs-and-the-dom.html#callback-refs');
+     if (!previousRef) {
+         // When there is no ref on the element, use the new ref directly

@@ -92,7 +92,7 @@ export default function DashboardStatsPanel({ className }: { className?: string 
   return (
     <div className={`bg-[#232f3e] border-b border-black/50 px-4 h-[60px] flex items-center justify-between text-white shadow-md ${className}`}>
       <div className="flex items-center h-full">
-        <h1 className="text-lg font-bold text-white pr-6">Forest Shield</h1>
+        <h1 className="text-lg font-bold text-white pr-6">Floro</h1>
         <div className="flex h-full">
             <StatItem 
               label="System Status" 

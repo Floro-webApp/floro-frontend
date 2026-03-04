@@ -175,6 +175,32 @@ export async function GET(request: NextRequest) {
   }
 }
 
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const tiffUrl = body?.url;
+    const width = body?.width ?? 800;
+    const height = body?.height ?? 600;
+    const format = body?.format ?? 'jpeg';
+    const quality = body?.quality ?? 80;
+
+    const url = new URL(request.url);
+    if (tiffUrl) url.searchParams.set('url', String(tiffUrl));
+    url.searchParams.set('width', String(width));
+    url.searchParams.set('height', String(height));
+    url.searchParams.set('format', String(format));
+    url.searchParams.set('quality', String(quality));
+
+    // Reuse GET implementation to keep processing logic in one place.
+    return GET(new NextRequest(url.toString(), { method: 'GET' }));
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: error.message || 'Invalid request payload for TIFF processing' },
+      { status: 400 }
+    );
+  }
+}
+
 function generateErrorPlaceholder(width: number, height: number, format: string, errorMessage: string): string {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">

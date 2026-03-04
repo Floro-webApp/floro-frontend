@@ -134,7 +134,7 @@ function AlertCard({ alert, onAcknowledge }: { alert: Alert; onAcknowledge: (id:
               <span className="text-2xl font-bold text-gray-900">
                 {parseFloat(alert.deforestationPercentage.toString()).toFixed(2)}%
               </span>
-              <span className="text-sm text-gray-600">deforestation detected</span>
+              <span className="text-sm text-gray-600">Vegetation Stress detected</span>
             </div>
             
             {/* Alert Message */}
@@ -262,9 +262,9 @@ export default function AlertsPanel() {
           <ShieldCheck className="w-16 h-16 text-green-600" />
         </div>
         <div className="space-y-3">
-          <h3 className="text-2xl font-bold text-green-800">Forest Shield Active</h3>
+          <h3 className="text-2xl font-bold text-green-800">Floro Active</h3>
           <p className="text-green-600 font-medium">All monitoring regions are secure</p>
-          <p className="text-sm text-green-500">No deforestation alerts detected</p>
+          <p className="text-sm text-green-500">No Vegetation Stress alerts detected</p>
         </div>
         <div className="mt-6 flex items-center gap-2 text-sm text-green-600">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />

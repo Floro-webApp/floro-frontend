@@ -42,6 +42,7 @@ export interface UseYieldPredictionDataOptions {
 }
 
 const DEFAULT_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 const DEFAULT_DATA: YieldPredictionData = {
   satellite: {
@@ -133,7 +134,7 @@ export function useYieldPredictionData(
       if (regionId) params.append('regionId', regionId);
 
       const response = await fetch(
-        `http://localhost:3001/yield/all-data?${params.toString()}`,
+        `${API_BASE_URL}/yield/all-data?${params.toString()}`,
       );
 
       if (!response.ok) {

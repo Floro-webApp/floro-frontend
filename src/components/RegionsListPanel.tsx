@@ -221,7 +221,7 @@ export default function RegionsListPanel({ selectedRegion, onRegionSelected }: R
                     </div>
                     {region.lastDeforestationPercentage !== undefined && (
                       <div className={`text-xs font-semibold ${getDeforestationColor(region.lastDeforestationPercentage)}`}>
-                        {region.lastDeforestationPercentage.toFixed(1)}% deforestation
+                        {region.lastDeforestationPercentage.toFixed(1)}% Vegetation Stress
                       </div>
                     )}
                   </div>

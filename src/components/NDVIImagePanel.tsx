@@ -67,6 +67,39 @@ interface NDVIImageData {
 	availableImages?: any[];
 }
 
+const DEFAULT_NDVI_CONFIG: NDVIConfig = {
+	redBand: "B04",
+	nirBand: "B08",
+	cloudCover: 20,
+	dateRange: {
+		start: "2022-06-01",
+		end: "2022-09-01",
+	},
+};
+
+interface NDVIPanelRuntimeCache {
+	selectedArea: SelectedArea | null;
+	currentImage: NDVIImageData | null;
+	selectedImageIndex: number;
+	ndviConfig: NDVIConfig;
+	showSettings: boolean;
+	processedImageCache: Map<string, string>;
+}
+
+const cloneNDVIConfig = (config: NDVIConfig): NDVIConfig => ({
+	...config,
+	dateRange: { ...config.dateRange },
+});
+
+let ndviPanelRuntimeCache: NDVIPanelRuntimeCache = {
+	selectedArea: null,
+	currentImage: null,
+	selectedImageIndex: 0,
+	ndviConfig: cloneNDVIConfig(DEFAULT_NDVI_CONFIG),
+	showSettings: false,
+	processedImageCache: new Map<string, string>(),
+};
+
 const SENTINEL_BANDS = [
 	{
 		id: "B01",
@@ -219,7 +252,12 @@ const TiffImageViewer = ({
 
 	useEffect(() => {
 		const processTiffImage = async () => {
-			if (!tiffUrl) return;
+			if (!tiffUrl) {
+				setProcessedImageUrl(null);
+				setProcessingError("No NDVI image URL returned by backend");
+				onError?.();
+				return;
+			}
 
 			// Check cache first
 			const cachedUrl = processedImageCache?.get(tiffUrl);
@@ -347,28 +385,49 @@ export default function NDVIImagePanel({
 	onRequestAreaSelection,
 }: NDVIImagePanelProps) {
 	const { mutate } = useSWRConfig();
-	const [selectedArea, setSelectedArea] = useState<SelectedArea | null>(null);
-	const [currentImage, setCurrentImage] = useState<NDVIImageData | null>(null);
-	const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+	const [selectedArea, setSelectedArea] = useState<SelectedArea | null>(
+		() => ndviPanelRuntimeCache.selectedArea
+	);
+	const [currentImage, setCurrentImage] = useState<NDVIImageData | null>(
+		() => ndviPanelRuntimeCache.currentImage
+	);
+	const [selectedImageIndex, setSelectedImageIndex] = useState(
+		() => ndviPanelRuntimeCache.selectedImageIndex
+	);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [loadingStep, setLoadingStep] = useState("");
 	const [loadingProgress, setLoadingProgress] = useState(0);
-	const [showSettings, setShowSettings] = useState(false);
+	const [showSettings, setShowSettings] = useState(
+		() => ndviPanelRuntimeCache.showSettings
+	);
 	const [processedImageCache, setProcessedImageCache] = useState<
 		Map<string, string>
-	>(new Map());
+	>(() => new Map(ndviPanelRuntimeCache.processedImageCache));
 	const [loadingImages, setLoadingImages] = useState<Set<number>>(new Set());
 
-	const [ndviConfig, setNdviConfig] = useState<NDVIConfig>({
-		redBand: "B04",
-		nirBand: "B08",
-		cloudCover: 20,
-		dateRange: {
-			start: "2022-06-01",
-			end: "2022-09-01",
-		},
-	});
+	const [ndviConfig, setNdviConfig] = useState<NDVIConfig>(() =>
+		cloneNDVIConfig(ndviPanelRuntimeCache.ndviConfig)
+	);
+
+	// Persist panel state across unmount/remount during tab switches.
+	useEffect(() => {
+		ndviPanelRuntimeCache = {
+			selectedArea,
+			currentImage,
+			selectedImageIndex,
+			ndviConfig: cloneNDVIConfig(ndviConfig),
+			showSettings,
+			processedImageCache: new Map(processedImageCache),
+		};
+	}, [
+		selectedArea,
+		currentImage,
+		selectedImageIndex,
+		ndviConfig,
+		showSettings,
+		processedImageCache,
+	]);
 
 	// Fetch available regions
 	const { data: regions, error: regionsError } = useSWR(
@@ -393,25 +452,43 @@ export default function NDVIImagePanel({
 		})) || [];
 
 	useEffect(() => {
-		if (selectedRegion && !selectedArea) {
-			const area: SelectedArea = {
-				id: selectedRegion.id,
-				name: selectedRegion.name,
-				bounds: {
-					north: selectedRegion.latitude + 0.01,
-					south: selectedRegion.latitude - 0.01,
-					east: selectedRegion.longitude + 0.01,
-					west: selectedRegion.longitude - 0.01,
-				},
-				center: {
-					lat: selectedRegion.latitude,
-					lng: selectedRegion.longitude,
-				},
-				timestamp: new Date(),
-			};
-			setSelectedArea(area);
+		if (!selectedRegion) {
+			return;
 		}
-	}, [selectedRegion, selectedArea]);
+
+		const area: SelectedArea = {
+			id: selectedRegion.id,
+			name: selectedRegion.name,
+			bounds: {
+				north: selectedRegion.latitude + 0.01,
+				south: selectedRegion.latitude - 0.01,
+				east: selectedRegion.longitude + 0.01,
+				west: selectedRegion.longitude - 0.01,
+			},
+			center: {
+				lat: selectedRegion.latitude,
+				lng: selectedRegion.longitude,
+			},
+			timestamp: new Date(),
+		};
+
+		setSelectedArea((prev) => {
+			if (
+				prev &&
+				prev.id === area.id &&
+				prev.center.lat === area.center.lat &&
+				prev.center.lng === area.center.lng
+			) {
+				return prev;
+			}
+			return area;
+		});
+	}, [
+		selectedRegion?.id,
+		selectedRegion?.name,
+		selectedRegion?.latitude,
+		selectedRegion?.longitude,
+	]);
 
 	const loadingSteps = [
 		"Initializing satellite data search...",
@@ -512,8 +589,8 @@ export default function NDVIImagePanel({
 				riskDescription ||
 				(riskLevel !== "UNKNOWN" ? `${riskLevel} risk: ${riskPriority}` : "") ||
 				(deforestationDetected
-					? "Deforestation detected"
-					: "No significant deforestation detected");
+					? "Vegetation Stress detected"
+					: "No significant Vegetation Stress detected");
 
 			// Extract processing time
 			const processingTimeMs = analysisResponse?.processing_time_ms || 0;
@@ -571,12 +648,31 @@ export default function NDVIImagePanel({
 			let cloudCoverage = 0;
 
 			if (firstImage) {
-				// Try to get image URL from S3 output or result data
-				imageUrl =
-					firstImage?.s3_output ||
-					firstImage?.visual_url ||
-					firstImage?.url ||
-					"";
+				// Prefer NDVI GeoTIFF generated by the backend (signed URL via dashboard API)
+				try {
+					const regionId = selectedRegion?.id || selectedArea.id;
+					if (regionId && firstImage.imageId) {
+						const signedUrl = await api.getNdviImageUrl(
+							regionId,
+							firstImage.imageId
+						);
+						imageUrl = signedUrl;
+					}
+				} catch (e) {
+					console.error(
+						"Failed to fetch signed NDVI image URL, falling back to raw image fields:",
+						e
+					);
+				}
+
+				// Fallbacks in case NDVI GeoTIFF URL isn't available
+				if (!imageUrl) {
+					imageUrl =
+						firstImage?.s3_output ||
+						firstImage?.visual_url ||
+						firstImage?.url ||
+						"";
+				}
 				acquisitionDate =
 					firstImage?.date ||
 					firstImage?.acquisition_date ||
@@ -642,14 +738,31 @@ export default function NDVIImagePanel({
 
 		const selectedImg = currentImage.availableImages[imageIndex];
 
-		// Handle different image structures (from results array or search response)
-		const imageUrl =
-			selectedImg?.s3_output ||
-			selectedImg?.assets?.visual ||
-			selectedImg?.assets?.red ||
-			selectedImg?.visual_url ||
-			selectedImg?.url ||
-			"";
+		// Prefer backend-signed NDVI GeoTIFF URL for each selected timeline image.
+		let imageUrl = "";
+		const regionId =
+			selectedRegion?.id || selectedArea?.id || currentImage?.area?.id || "";
+		if (regionId && selectedImg?.imageId) {
+			try {
+				imageUrl = await api.getNdviImageUrl(regionId, selectedImg.imageId);
+			} catch (error) {
+				console.error(
+					`Failed to fetch signed NDVI URL for ${selectedImg.imageId}:`,
+					error
+				);
+			}
+		}
+
+		// Fallback for non-NDVI payload structures.
+		if (!imageUrl) {
+			imageUrl =
+				selectedImg?.s3_output ||
+				selectedImg?.assets?.visual ||
+				selectedImg?.assets?.red ||
+				selectedImg?.visual_url ||
+				selectedImg?.url ||
+				"";
+		}
 
 		// Set loading state for this specific image
 		setLoadingImages((prev) => new Set(prev).add(imageIndex));
@@ -729,6 +842,14 @@ export default function NDVIImagePanel({
 		setCurrentImage(null);
 		setSelectedImageIndex(0);
 		setError(null);
+		setLoadingImages(new Set());
+
+		// Clear cached visual selection immediately for remount scenarios.
+		ndviPanelRuntimeCache = {
+			...ndviPanelRuntimeCache,
+			currentImage: null,
+			selectedImageIndex: 0,
+		};
 	};
 
 	const handleConfigChange = (key: keyof NDVIConfig, value: any) => {

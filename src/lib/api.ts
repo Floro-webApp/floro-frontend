@@ -322,11 +322,38 @@ export const api = {
 	//   return response.json();
 	// },
 
-	// async getAWSCostData(): Promise<any> {
-	//   const response = await fetch(`${API_BASE_URL}/dashboard/aws/costs`);
-	//   if (!response.ok) throw new Error('Failed to fetch AWS cost data');
-	//   return response.json();
-	// },
+		async getAWSCostData(): Promise<any> {
+			// Primary endpoint may be disabled on free tier; use health endpoint fallback.
+			const costsUrl = `${API_BASE_URL}/dashboard/aws/costs`;
+			const healthUrl = `${API_BASE_URL}/dashboard/aws/health`;
+
+			try {
+				const response = await fetch(costsUrl);
+				if (response.ok) return response.json();
+			} catch {
+				// Continue to fallback.
+			}
+
+			const fallback = await fetch(healthUrl);
+			if (!fallback.ok) throw new Error("Failed to fetch AWS cost data");
+			const health = await fallback.json();
+
+			return {
+				dailyCosts: [],
+				monthlyProjection: health?.cost_health?.projected_month || 0,
+				currentMonth: health?.cost_health?.current_month || 0,
+				previousMonth: 0,
+				usageMetrics: {
+					lambdaInvocations:
+						health?.services?.lambda?.total_invocations ||
+						health?.performance_summary?.lambda_invocations ||
+						0,
+					s3Requests: 0,
+					dataTransferGB: health?.services?.s3?.total_storage_gb || 0,
+					computeHours: health?.performance_summary?.compute_hours || 0,
+				},
+			};
+		},
 
 	// async getCloudWatchLogs(logGroup?: string, limit?: number): Promise<any> {
 	//   const params = new URLSearchParams();
@@ -364,11 +391,13 @@ export const api = {
 		return response.json();
 	},
 
-	// async getSystemHealth(): Promise<any> {
-	//   const response = await fetch(`${API_BASE_URL}/dashboard/integration/system-health`);
-	//   if (!response.ok) throw new Error('Failed to fetch system health');
-	//   return response.json();
-	// },
+		async getSystemHealth(): Promise<any> {
+			const response = await fetch(
+				`${API_BASE_URL}/dashboard/integration/system-health`
+			);
+			if (!response.ok) throw new Error("Failed to fetch system health");
+			return response.json();
+		},
 
 	// async getActivityFeed(limit?: number): Promise<any> {
 	//   const params = new URLSearchParams();
@@ -447,14 +476,18 @@ export const api = {
 			quality?: number;
 		}
 	): Promise<string> {
-		const params = new URLSearchParams();
-		params.append("url", tiffUrl);
-		if (options?.width) params.append("width", options.width.toString());
-		if (options?.height) params.append("height", options.height.toString());
-		if (options?.format) params.append("format", options.format);
-		if (options?.quality) params.append("quality", options.quality.toString());
-
-		const response = await fetch(`/api/process-tiff?${params}`);
+		// Use POST to avoid URL-length issues with long S3 signed URLs.
+		const response = await fetch(`/api/process-tiff`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				url: tiffUrl,
+				width: options?.width,
+				height: options?.height,
+				format: options?.format,
+				quality: options?.quality,
+			}),
+		});
 		if (!response.ok) throw new Error("Failed to process TIFF image");
 
 		// Return the processed image URL or data URL
@@ -475,8 +508,33 @@ export const api = {
 			`${API_BASE_URL}/api/tiff-info?url=${encodeURIComponent(tiffUrl)}`
 		);
 		if (!response.ok) throw new Error("Failed to get TIFF info");
-		return response.json();
-	},
+			return response.json();
+		},
+
+		// Get signed NDVI GeoTIFF URL for a region/image pair
+		async getNdviImageUrl(
+			regionId: string,
+			imageId: string,
+			expiresIn: number = 3600
+		): Promise<string> {
+			const response = await fetch(
+				`${API_BASE_URL}/dashboard/regions/${regionId}/ndvi-image/${imageId}?expiresIn=${expiresIn}`
+			);
+			if (!response.ok) {
+				let details = "";
+				try {
+					const errorBody = await response.json();
+					details = errorBody?.message || errorBody?.error || "";
+				} catch {
+					// Ignore parse errors and keep generic message.
+				}
+				throw new Error(
+					`Failed to fetch NDVI image URL (${response.status})${details ? `: ${details}` : ""}`
+				);
+			}
+			const data = await response.json();
+			return data.signedUrl as string;
+		},
 
 	// Visualization endpoints
 	// async getRegionVisualizations(regionId: string): Promise<any> {
