@@ -5,7 +5,7 @@ import { Component, ErrorInfo, ReactNode, useEffect } from 'react';
 import { useState } from 'react';
 
 // Shared loading component with shimmer effect and fade animations
-const LoadingScreen = ({ isVisible = true, message = "Loading Forest Shield..." }: { 
+const LoadingScreen = ({ isVisible = true, message = "Loading Floro..." }: { 
   isVisible?: boolean; 
   message?: string; 
 }) => (
@@ -18,7 +18,7 @@ const LoadingScreen = ({ isVisible = true, message = "Loading Forest Shield..." 
     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -skew-x-12 animate-shimmer"></div>
     
     <div className="relative z-10">
-      <img src="/logo.png" alt="Forest Shield" className="w-96 h-96 animate-pulse" />
+      <img src="/logo.png" alt="Floro" className="w-96 h-96 animate-pulse" />
       <div className="text-center mt-8">
         <div className="text-lg font-medium mb-2">{message}</div>
         <div className="text-sm">Please wait a moment while we prepare the map...</div>

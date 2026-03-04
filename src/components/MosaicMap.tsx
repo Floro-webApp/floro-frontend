@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useState, forwardRef, useImperativeHandle, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L, { Map } from 'leaflet';
@@ -163,36 +163,46 @@ const createRegionIcon = (status: Region['status'], deforestationLevel?: number,
 // MapEvents component to handle map events like heatmap fetching
 function MapEvents({ isHeatmapVisible, onDataFetched, onError }: { isHeatmapVisible: boolean, onDataFetched: (data: any[]) => void, onError: (msg: string) => void }) {
   const map = useMap();
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const fetchHeatmapData = async () => {
+  const fetchHeatmapData = useCallback(async () => {
     if (!isHeatmapVisible) {
       onDataFetched([]); // Clear data if heatmap is not visible
       return;
     }
     try {
       const bounds = map.getBounds();
-      const data = await api.getHeatmapData({
+      // Use a safe any-typed access in case getHeatmapData is not declared on the api type.
+      // Use optional chaining and a fallback to avoid runtime/compile errors.
+      const data = await (api as any).getHeatmapData?.({
         north: bounds.getNorth(),
         south: bounds.getSouth(),
         east: bounds.getEast(),
         west: bounds.getWest(),
-      });
-      const points = data.data.map(p => [p.lat, p.lng, p.intensity]);
+      }) ?? { data: [] };
+      const points = (data.data || []).map((p: any) => [p.lat, p.lng, p.intensity]);
       onDataFetched(points);
     } catch (error) {
       console.error("Failed to fetch heatmap data:", error);
       onError("Could not load heatmap data for the current view.");
     }
-  };
+  }, [isHeatmapVisible, map, onDataFetched, onError]);
 
+  // Debounced heatmap fetch on map events
   useMapEvents({
-    moveend: fetchHeatmapData,
-    zoomend: fetchHeatmapData,
+    moveend: () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(fetchHeatmapData, 300);
+    },
+    zoomend: () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(fetchHeatmapData, 300);
+    },
   });
 
   useEffect(() => {
     fetchHeatmapData();
-  }, [isHeatmapVisible]); // Re-fetch when visibility changes
+  }, [isHeatmapVisible, fetchHeatmapData]); // Re-fetch when visibility or fetch function changes
 
   return null;
 }
@@ -380,6 +390,8 @@ interface MosaicMapProps {
   regions: Region[];
   selectedRegion: Region | null;
   ndviSelectionMode?: boolean;
+  /** Mosaic tile path - used as part of MapContainer key to avoid container reuse errors when layout changes */
+  tilePath?: string;
 }
 
 const MosaicMap = forwardRef<Map, MosaicMapProps>(({ 
@@ -393,11 +405,13 @@ const MosaicMap = forwardRef<Map, MosaicMapProps>(({
   onRegionCreated,
   regions,
   selectedRegion,
-  ndviSelectionMode = false
+  ndviSelectionMode = false,
+  tilePath = ''
 }, ref) => {
   const [mapInstance, setMapInstance] = useState<Map | null>(null);
   const [heatmapPoints, setHeatmapPoints] = useState<any[]>([]);
-  const [mapKey, setMapKey] = useState<number>(Date.now());
+  const [mapKey] = useState<number>(() => Date.now());
+  const mapContainerKey = `${mapKey}-${tilePath}`;
   
   // New state for analysis control
   const [analysisSchedules, setAnalysisSchedules] = useState<Record<string, AnalysisScheduleDto>>({});
@@ -493,32 +507,24 @@ const MosaicMap = forwardRef<Map, MosaicMapProps>(({
     }
   };
 
-  // Cleanup function for map instance
+  // Cleanup: only clear Leaflet's container id. Do NOT call map.remove() here.
+  // react-leaflet's MapContainer already calls map.remove() in its own useEffect
+  // cleanup. Calling remove() twice causes "Map container is being reused by
+  // another instance" when the second remove runs on an already-cleared container.
   useEffect(() => {
     return () => {
       if (mapInstance) {
         try {
-          // Get container before removing the map
           const container = mapInstance.getContainer();
-          
-          // Remove the map instance
-          mapInstance.off(); // Remove all event listeners first
-          mapInstance.remove(); // Then remove the map
-          
-          // Leaflet leaves a reference on the container element that causes
-          // "Map container is being reused by another instance" if the
-          // component is remounted very quickly (e.g. when moving panels or
-          // under React 18 strict-mode double mounts). Removing or deleting
-          // that property ensures the next initialisation starts cleanly.
-          if (container && container.parentNode && (container as any)._leaflet_id !== undefined) {
+          if (container && (container as any)._leaflet_id !== undefined) {
             try {
               delete (container as any)._leaflet_id;
             } catch {
               (container as any)._leaflet_id = undefined;
             }
           }
-        } catch (error) {
-          console.warn('Error cleaning up map instance:', error);
+        } catch {
+          // ignore
         }
       }
     };
@@ -761,7 +767,7 @@ const MosaicMap = forwardRef<Map, MosaicMapProps>(({
       `}</style>
 
       <MapContainer 
-        key={mapKey}
+        key={mapContainerKey}
         ref={setMapInstance}
         center={defaultCenter} 
         zoom={7} 
@@ -971,7 +977,7 @@ const MosaicMap = forwardRef<Map, MosaicMapProps>(({
 
                         <div className={`p-3 ${isSatelliteView ? 'bg-gray-800 border border-gray-700' : 'bg-gray-50 border border-gray-200'}`}>
                           <div className={`text-xs font-medium ${isSatelliteView ? 'text-gray-400' : 'text-gray-500'}`}>
-                            DEFORESTATION RISK
+                            VEGETATION STRESS RISK
                           </div>
                           <div className={`text-lg font-bold ${
                             (region.lastDeforestationPercentage || 0) > 15 ? 'text-red-500' :

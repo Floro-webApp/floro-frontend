@@ -85,7 +85,7 @@ export default function AWSArchitectureDiagram() {
     },
     {
       id: 'step-functions',
-      name: 'Deforestation\nPipeline',
+      name: 'Vegetation Stress\nPipeline',
       icon: '/aws-icons/stepfunctions.svg',
       type: 'integration',
       x: 275,
@@ -186,7 +186,7 @@ export default function AWSArchitectureDiagram() {
     <div className="h-full bg-white p-4 overflow-hidden">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-[#0f1419] mb-2">AWS Floro Architecture</h3>
-        <p className="text-sm text-[#687078]">Real-time data flow visualization of deforestation detection pipeline</p>
+        <p className="text-sm text-[#687078]">Real-time data flow visualization of Vegetation Stress detection pipeline</p>
       </div>
 
       {/* Architecture Diagram */}

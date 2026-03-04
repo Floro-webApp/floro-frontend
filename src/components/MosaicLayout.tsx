@@ -41,6 +41,7 @@ import AWSServicesPanel from "./AWSServicesPanel";
 // import KMeansClusteringPanel from './KMeansClusteringPanel';
 import NDVIImagePanel from "./NDVIImagePanel";
 import RegionsListPanel from "./RegionsListPanel";
+import YieldPredictionPanel from "./YieldPredictionPanel";
 import CriticalAlertOverlay from "./CriticalAlertOverlay";
 import { ToastContainer, useToast } from "./ui/toast";
 
@@ -55,10 +56,11 @@ type ViewId =
 	| "logs"
 	| "aws"
 	| "ndvi"
-	| "regions";
+	| "regions"
+	| "yield";
 
 const TITLE_MAP: Record<ViewId, string> = {
-	map: "FLORO MONITORING MAP",
+	map: "MONITORING MAP",
 	details: "REGION DETAILS",
 	// alerts: 'ACTIVE ALERTS',
 	jobs: "ACTIVE ANALYSIS JOBS",
@@ -70,6 +72,7 @@ const TITLE_MAP: Record<ViewId, string> = {
 	// kmeans: 'K-MEANS CLUSTERING',
 	ndvi: "NDVI IMAGE ANALYSIS",
 	regions: "REGIONS LIST",
+	yield: "YIELD PREDICTION",
 };
 
 const ICON_MAP: Record<ViewId, string> = {
@@ -85,6 +88,7 @@ const ICON_MAP: Record<ViewId, string> = {
 	// kmeans: 'KMN',
 	ndvi: "NDV",
 	regions: "RGN",
+	yield: "Yield",
 };
 
 // Tab groups for organized layout
@@ -99,7 +103,7 @@ const TAB_GROUPS = {
 		title: "Analysis",
 		icon: BarChart3,
 		// views: ['kmeans', 'ndvi', 'aws'] as ViewId[],
-		views: ["ndvi", "aws"] as ViewId[],
+		views: ["ndvi", "aws", "yield"] as ViewId[],
 	},
 	operations: {
 		title: "Operations",
@@ -113,7 +117,7 @@ export default function MosaicLayout() {
 	const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [regions, setRegions] = useState<Region[]>([]);
-	const [isHeatmapVisible, setIsHeatmapVisible] = useState(false);
+	const [isHeatmapVisible] = useState(false);
 	const [isCreating, setIsCreating] = useState(false);
 	const [isSatelliteView, setIsSatelliteView] = useState(false);
 	const [ndviAreaSelectionMode, setNdviAreaSelectionMode] = useState(false);
@@ -224,10 +228,6 @@ export default function MosaicLayout() {
 			document.removeEventListener("mouseup", handleMouseUp);
 		};
 	}, [isResizing]);
-
-	const handleToggleHeatmap = () => {
-		setIsHeatmapVisible((prev) => !prev);
-	};
 
 	const handleToggleSatellite = () => {
 		setIsSatelliteView((prev) => !prev);
@@ -377,7 +377,7 @@ export default function MosaicLayout() {
 	};
 
 	// Component renderers
-	const renderComponent = (viewId: ViewId) => {
+	const renderComponent = (viewId: ViewId, tilePath?: number[]) => {
 		switch (viewId) {
 			case "map":
 				return (
@@ -398,6 +398,7 @@ export default function MosaicLayout() {
 						)}
 						<MosaicMap
 							ref={mapRef}
+							tilePath={tilePath?.join("-") ?? ""}
 							onRegionSelected={handleRegionSelected}
 							onRegionDeselected={handleRegionDeselected}
 							onError={handleError}
@@ -453,6 +454,17 @@ export default function MosaicLayout() {
 						onRegionSelected={handleRegionSelected}
 					/>
 				);
+			case "yield":
+				return (
+					<YieldPredictionPanel
+						regionId={selectedRegion?.id || ""}
+						tileId={`S2_${selectedRegion?.latitude}_${selectedRegion?.longitude}`}
+						ndvi={0.5}
+						onPredictionComplete={() => {
+							showSuccess("Yield prediction completed successfully!");
+						}}
+					/>
+				);
 			default:
 				return <div>Unknown view</div>;
 		}
@@ -462,39 +474,36 @@ export default function MosaicLayout() {
 		const isCollapsed = collapsedPanels.has(id);
 
 		const customControls = (
-			<div className="flex items-center gap-2">
+			<div className="flex w-full items-center justify-end gap-2">
 				{id === "map" && (
 					<MapToolbar
-						onToggleHeatmap={handleToggleHeatmap}
-						isHeatmapVisible={isHeatmapVisible}
 						onToggleCreate={handleToggleCreate}
 						isCreating={isCreating}
 						isSatelliteView={isSatelliteView}
 						onToggleSatellite={handleToggleSatellite}
-						onZoomIn={() => mapRef.current?.zoomIn()}
-						onZoomOut={() => mapRef.current?.zoomOut()}
 						onResetView={() => mapRef.current?.setView([19.7515, 75.7139], 7)}
-						regionCount={regions.length}
 					/>
 				)}
 
 				{/* Panel Controls */}
-				<div className="flex items-center gap-1 ml-2">
-					<button
-						onClick={() => handleToggleCollapse(id)}
-						className="p-1 text-white panel-control-btn"
-						title={isCollapsed ? "Expand panel" : "Collapse panel"}
-					>
-						<Minus size={12} />
-					</button>
-					<button
-						onClick={() => handleClosePanel(id)}
-						className="p-1 text-white panel-control-btn"
-						title="Close panel"
-					>
-						<X size={12} />
-					</button>
-				</div>
+				{id !== "map" && (
+					<div className="flex items-center gap-1 ml-2">
+						<button
+							onClick={() => handleToggleCollapse(id)}
+							className="p-1 text-white panel-control-btn"
+							title={isCollapsed ? "Expand panel" : "Collapse panel"}
+						>
+							<Minus size={12} />
+						</button>
+						<button
+							onClick={() => handleClosePanel(id)}
+							className="p-1 text-white panel-control-btn"
+							title="Close panel"
+						>
+							<X size={12} />
+						</button>
+					</div>
+				)}
 			</div>
 		);
 
@@ -511,7 +520,7 @@ export default function MosaicLayout() {
 					}`}
 					onDoubleClick={() => handleToggleCollapse(id)}
 				>
-					{!isCollapsed && renderComponent(id)}
+					{!isCollapsed && renderComponent(id, path)}
 				</div>
 			</MosaicWindow>
 		);
@@ -873,6 +882,9 @@ export default function MosaicLayout() {
           border-bottom: 1px solid #3c4043 !important;
           color: #ffffff !important;
           padding: 6px 12px !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 8px !important;
           font-size: 10px !important;
           font-weight: 600 !important;
           letter-spacing: 0.5px !important;
@@ -903,10 +915,56 @@ export default function MosaicLayout() {
           color: #ffffff !important;
           font-family: 'Amazon Ember', 'Helvetica Neue', sans-serif !important;
           font-size: 10px !important;
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
           user-select: none !important;
           -webkit-user-select: none !important;
           -moz-user-select: none !important;
           -ms-user-select: none !important;
+        }
+
+        .mosaic-blueprint-theme .mosaic-window-toolbar .mosaic-window-toolbar-controls {
+          margin-left: auto !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: flex-end !important;
+          flex-wrap: wrap !important;
+          gap: 6px !important;
+          min-width: 0 !important;
+        }
+
+        @media (max-width: 900px) {
+          .mosaic-blueprint-theme .mosaic-window-toolbar {
+            padding: 6px 8px !important;
+            gap: 6px !important;
+            flex-wrap: wrap !important;
+          }
+
+          .mosaic-blueprint-theme .mosaic-window-title {
+            flex-basis: 100% !important;
+            white-space: normal !important;
+            line-height: 1.2 !important;
+          }
+
+          .mosaic-blueprint-theme .mosaic-window-toolbar .mosaic-window-toolbar-controls {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            margin-left: 0 !important;
+            justify-content: flex-start !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .mosaic-blueprint-theme .mosaic-window-toolbar {
+            padding: 5px 6px !important;
+          }
+
+          .mosaic-blueprint-theme .mosaic-window-title {
+            font-size: 9px !important;
+          }
         }
         
         .mosaic-blueprint-theme .mosaic-window-body {

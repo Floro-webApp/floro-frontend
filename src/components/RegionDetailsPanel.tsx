@@ -168,7 +168,7 @@ export default function RegionDetailsPanel({
       onError(''); // Clear any previous errors
       onShowToast?.showSuccess(
         'Analysis Started',
-        `Deforestation analysis has been triggered for ${editingRegion.name}. Job ID: ${result.executionArn}`,
+        `Vegetation Stress analysis has been triggered for ${editingRegion.name}. Job ID: ${result.executionArn}`,
         7000
       );
     } catch (err) {
@@ -227,7 +227,7 @@ export default function RegionDetailsPanel({
           </span>
         </div>
         <div className="bg-gray-50 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Deforestation</h3>
+          <h3 className="text-sm font-medium text-gray-500 mb-2">Vegetation Stress</h3>
           <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium border ${getDeforestationBadgeColor(editingRegion.lastDeforestationPercentage)}`}>
             {editingRegion.lastDeforestationPercentage ? `${editingRegion.lastDeforestationPercentage}%` : 'No data'}
           </span>

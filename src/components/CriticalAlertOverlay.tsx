@@ -205,7 +205,7 @@ export default function CriticalAlertOverlay({ onAlertAcknowledged }: CriticalAl
                 )}>
                   {parseFloat(mostCriticalAlert.deforestationPercentage.toString()).toFixed(1)}%
                 </span>
-                <span className="text-xs text-gray-600">deforestation</span>
+                <span className="text-xs text-gray-600">Vegetation Stress</span>
               </div>
               
               <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -267,7 +267,7 @@ export default function CriticalAlertOverlay({ onAlertAcknowledged }: CriticalAl
                       {mostCriticalAlert.level} ALERT
                     </h1>
                     <p className="text-white/80 text-lg">
-                      Forest Shield Detection System
+                      Floro Detection System
                     </p>
                   </div>
                 </div>
@@ -308,7 +308,7 @@ export default function CriticalAlertOverlay({ onAlertAcknowledged }: CriticalAl
                       <span className="text-4xl font-bold">
                         {parseFloat(mostCriticalAlert.deforestationPercentage.toString()).toFixed(2)}%
                       </span>
-                      <span className="text-white/80 ml-2">deforestation detected</span>
+                      <span className="text-white/80 ml-2">Vegetation Stress detected</span>
                     </div>
                   </div>
 

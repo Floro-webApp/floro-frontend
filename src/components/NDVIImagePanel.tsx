@@ -67,6 +67,39 @@ interface NDVIImageData {
 	availableImages?: any[];
 }
 
+const DEFAULT_NDVI_CONFIG: NDVIConfig = {
+	redBand: "B04",
+	nirBand: "B08",
+	cloudCover: 20,
+	dateRange: {
+		start: "2022-06-01",
+		end: "2022-09-01",
+	},
+};
+
+interface NDVIPanelRuntimeCache {
+	selectedArea: SelectedArea | null;
+	currentImage: NDVIImageData | null;
+	selectedImageIndex: number;
+	ndviConfig: NDVIConfig;
+	showSettings: boolean;
+	processedImageCache: Map<string, string>;
+}
+
+const cloneNDVIConfig = (config: NDVIConfig): NDVIConfig => ({
+	...config,
+	dateRange: { ...config.dateRange },
+});
+
+let ndviPanelRuntimeCache: NDVIPanelRuntimeCache = {
+	selectedArea: null,
+	currentImage: null,
+	selectedImageIndex: 0,
+	ndviConfig: cloneNDVIConfig(DEFAULT_NDVI_CONFIG),
+	showSettings: false,
+	processedImageCache: new Map<string, string>(),
+};
+
 const SENTINEL_BANDS = [
 	{
 		id: "B01",
@@ -142,6 +175,66 @@ const SENTINEL_BANDS = [
 	},
 ];
 
+const extractDateFromImageId = (imageId?: string): string | null => {
+	if (!imageId) return null;
+	const match = imageId.match(/_(\d{8})_/);
+	if (!match) return null;
+	const raw = match[1];
+	const yyyy = raw.slice(0, 4);
+	const mm = raw.slice(4, 6);
+	const dd = raw.slice(6, 8);
+	return `${yyyy}-${mm}-${dd}T00:00:00Z`;
+};
+
+const extractImageDate = (image: any): string | null => {
+	if (!image) return null;
+	return (
+		image.date ||
+		image.acquisition_date ||
+		image.timestamp ||
+		extractDateFromImageId(image.imageId || image.id)
+	);
+};
+
+const extractCloudCover = (image: any): number | null => {
+	if (!image) return null;
+	const candidates = [
+		image.cloudCover,
+		image.cloud_cover,
+		image.cloudCoverage,
+		image.cloud_coverage,
+		image.metadata?.cloudCover,
+		image.metadata?.cloud_coverage,
+	];
+	for (const value of candidates) {
+		const num = Number(value);
+		if (Number.isFinite(num)) {
+			return num;
+		}
+	}
+	return null;
+};
+
+const extractImageNdviStats = (
+	image: any
+): { mean?: number; min?: number; max?: number; std?: number } | null => {
+	if (!image) return null;
+	const stats = image.ndvi_statistics || image.statistics;
+	if (!stats) return null;
+
+	const mean = Number(stats.mean ?? stats.mean_ndvi);
+	const min = Number(stats.min ?? stats.min_ndvi);
+	const max = Number(stats.max ?? stats.max_ndvi);
+	const std = Number(stats.std ?? stats.std_ndvi);
+
+	return {
+		mean: Number.isFinite(mean) ? mean : undefined,
+		min: Number.isFinite(min) ? min : undefined,
+		max: Number.isFinite(max) ? max : undefined,
+		std: Number.isFinite(std) ? std : undefined,
+	};
+};
+
 interface NDVIImagePanelProps {
 	selectedRegion?: {
 		id: string;
@@ -216,10 +309,16 @@ const TiffImageViewer = ({
 	);
 	const [isProcessing, setIsProcessing] = useState(false);
 	const [processingError, setProcessingError] = useState<string | null>(null);
+	const displayCloudCover = extractCloudCover(metadata);
 
 	useEffect(() => {
 		const processTiffImage = async () => {
-			if (!tiffUrl) return;
+			if (!tiffUrl) {
+				setProcessedImageUrl(null);
+				setProcessingError("No NDVI image URL returned by backend");
+				onError?.();
+				return;
+			}
 
 			// Check cache first
 			const cachedUrl = processedImageCache?.get(tiffUrl);
@@ -324,7 +423,9 @@ const TiffImageViewer = ({
 						<div className="bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 text-white">
 							<div className="text-xs text-white/70">Cloud Cover</div>
 							<div className="text-sm font-medium">
-								{metadata?.cloud_coverage?.toFixed(1) || 0}%
+								{displayCloudCover !== null
+									? `${displayCloudCover.toFixed(1)}%`
+									: "N/A"}
 							</div>
 						</div>
 						{stats.processing_time && (
@@ -347,28 +448,49 @@ export default function NDVIImagePanel({
 	onRequestAreaSelection,
 }: NDVIImagePanelProps) {
 	const { mutate } = useSWRConfig();
-	const [selectedArea, setSelectedArea] = useState<SelectedArea | null>(null);
-	const [currentImage, setCurrentImage] = useState<NDVIImageData | null>(null);
-	const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+	const [selectedArea, setSelectedArea] = useState<SelectedArea | null>(
+		() => ndviPanelRuntimeCache.selectedArea
+	);
+	const [currentImage, setCurrentImage] = useState<NDVIImageData | null>(
+		() => ndviPanelRuntimeCache.currentImage
+	);
+	const [selectedImageIndex, setSelectedImageIndex] = useState(
+		() => ndviPanelRuntimeCache.selectedImageIndex
+	);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [loadingStep, setLoadingStep] = useState("");
 	const [loadingProgress, setLoadingProgress] = useState(0);
-	const [showSettings, setShowSettings] = useState(false);
+	const [showSettings, setShowSettings] = useState(
+		() => ndviPanelRuntimeCache.showSettings
+	);
 	const [processedImageCache, setProcessedImageCache] = useState<
 		Map<string, string>
-	>(new Map());
+	>(() => new Map(ndviPanelRuntimeCache.processedImageCache));
 	const [loadingImages, setLoadingImages] = useState<Set<number>>(new Set());
 
-	const [ndviConfig, setNdviConfig] = useState<NDVIConfig>({
-		redBand: "B04",
-		nirBand: "B08",
-		cloudCover: 20,
-		dateRange: {
-			start: "2022-06-01",
-			end: "2022-09-01",
-		},
-	});
+	const [ndviConfig, setNdviConfig] = useState<NDVIConfig>(() =>
+		cloneNDVIConfig(ndviPanelRuntimeCache.ndviConfig)
+	);
+
+	// Persist panel state across unmount/remount during tab switches.
+	useEffect(() => {
+		ndviPanelRuntimeCache = {
+			selectedArea,
+			currentImage,
+			selectedImageIndex,
+			ndviConfig: cloneNDVIConfig(ndviConfig),
+			showSettings,
+			processedImageCache: new Map(processedImageCache),
+		};
+	}, [
+		selectedArea,
+		currentImage,
+		selectedImageIndex,
+		ndviConfig,
+		showSettings,
+		processedImageCache,
+	]);
 
 	// Fetch available regions
 	const { data: regions, error: regionsError } = useSWR(
@@ -393,25 +515,43 @@ export default function NDVIImagePanel({
 		})) || [];
 
 	useEffect(() => {
-		if (selectedRegion && !selectedArea) {
-			const area: SelectedArea = {
-				id: selectedRegion.id,
-				name: selectedRegion.name,
-				bounds: {
-					north: selectedRegion.latitude + 0.01,
-					south: selectedRegion.latitude - 0.01,
-					east: selectedRegion.longitude + 0.01,
-					west: selectedRegion.longitude - 0.01,
-				},
-				center: {
-					lat: selectedRegion.latitude,
-					lng: selectedRegion.longitude,
-				},
-				timestamp: new Date(),
-			};
-			setSelectedArea(area);
+		if (!selectedRegion) {
+			return;
 		}
-	}, [selectedRegion, selectedArea]);
+
+		const area: SelectedArea = {
+			id: selectedRegion.id,
+			name: selectedRegion.name,
+			bounds: {
+				north: selectedRegion.latitude + 0.01,
+				south: selectedRegion.latitude - 0.01,
+				east: selectedRegion.longitude + 0.01,
+				west: selectedRegion.longitude - 0.01,
+			},
+			center: {
+				lat: selectedRegion.latitude,
+				lng: selectedRegion.longitude,
+			},
+			timestamp: new Date(),
+		};
+
+		setSelectedArea((prev) => {
+			if (
+				prev &&
+				prev.id === area.id &&
+				prev.center.lat === area.center.lat &&
+				prev.center.lng === area.center.lng
+			) {
+				return prev;
+			}
+			return area;
+		});
+	}, [
+		selectedRegion?.id,
+		selectedRegion?.name,
+		selectedRegion?.latitude,
+		selectedRegion?.longitude,
+	]);
 
 	const loadingSteps = [
 		"Initializing satellite data search...",
@@ -481,10 +621,54 @@ export default function NDVIImagePanel({
 				return;
 			}
 
-			// Extract data from correct response structure
-			const statistics = analysisResponse?.statistics || {};
-			const riskAssessment = analysisResponse?.risk_assessment || {};
-			const results = analysisResponse?.results || [];
+				// Extract data from correct response structure
+				const statistics = analysisResponse?.statistics || {};
+				const riskAssessment = analysisResponse?.risk_assessment || {};
+				const rawResults = analysisResponse?.results || [];
+
+				let results = rawResults;
+
+				// Always attempt metadata enrichment from search results so cloud cover/date
+				// reflect the actual Sentinel image metadata for each imageId.
+				if (rawResults.length > 0 && selectedArea) {
+					try {
+						const searchResponse = await api.searchSentinelImages({
+							latitude: selectedArea.center.lat,
+							longitude: selectedArea.center.lng,
+							startDate: ndviConfig.dateRange.start,
+							endDate: ndviConfig.dateRange.end,
+							cloudCover: ndviConfig.cloudCover,
+						});
+						const searchImages = searchResponse?.images || [];
+						const imageById = new Map<string, any>(
+							searchImages.map((img: any) => [img.id, img])
+						);
+
+						results = rawResults.map((item: any) => {
+							const matched = imageById.get(item.imageId);
+							const resolvedDate =
+								extractImageDate(matched) || extractImageDate(item);
+							const matchedCloud = extractCloudCover(matched);
+							const itemCloud = extractCloudCover(item);
+							const resolvedCloud = matchedCloud !== null ? matchedCloud : itemCloud;
+
+							return {
+								...item,
+								date: resolvedDate || item.date,
+								acquisition_date: resolvedDate || item.acquisition_date,
+								cloudCover:
+									resolvedCloud !== null ? resolvedCloud : item.cloudCover,
+								cloud_cover:
+									resolvedCloud !== null ? resolvedCloud : item.cloud_cover,
+							};
+						});
+					} catch (enrichmentError) {
+						console.warn(
+							"Could not enrich image metadata from search endpoint:",
+							enrichmentError
+						);
+					}
+				}
 
 			// Use actual NDVI statistics from backend
 			const avgNDVI = statistics?.avg_ndvi || 0;
@@ -512,8 +696,8 @@ export default function NDVIImagePanel({
 				riskDescription ||
 				(riskLevel !== "UNKNOWN" ? `${riskLevel} risk: ${riskPriority}` : "") ||
 				(deforestationDetected
-					? "Deforestation detected"
-					: "No significant deforestation detected");
+					? "Vegetation Stress detected"
+					: "No significant Vegetation Stress detected");
 
 			// Extract processing time
 			const processingTimeMs = analysisResponse?.processing_time_ms || 0;
@@ -564,27 +748,43 @@ export default function NDVIImagePanel({
 				successful_analyses: successfulAnalyses,
 			};
 
-			// Use first result for image display, or fallback to search if needed
-			let firstImage = results[0];
-			let imageUrl = "";
-			let acquisitionDate = "";
-			let cloudCoverage = 0;
+				// Use first result for image display, or fallback to search if needed
+				let firstImage = results[0];
+				let imageUrl = "";
+				let acquisitionDate = "";
+				let cloudCoverage = 0;
 
 			if (firstImage) {
-				// Try to get image URL from S3 output or result data
-				imageUrl =
-					firstImage?.s3_output ||
-					firstImage?.visual_url ||
-					firstImage?.url ||
-					"";
-				acquisitionDate =
-					firstImage?.date ||
-					firstImage?.acquisition_date ||
-					new Date().toISOString();
-				cloudCoverage = firstImage?.cloudCover || firstImage?.cloud_cover || 0;
-			} else {
-				// Fallback: search for images if results array is empty
-				const searchResponse = await api.searchSentinelImages({
+				// Prefer NDVI GeoTIFF generated by the backend (signed URL via dashboard API)
+				try {
+					const regionId = selectedRegion?.id || selectedArea.id;
+					if (regionId && firstImage.imageId) {
+						const signedUrl = await api.getNdviImageUrl(
+							regionId,
+							firstImage.imageId
+						);
+						imageUrl = signedUrl;
+					}
+				} catch (e) {
+					console.error(
+						"Failed to fetch signed NDVI image URL, falling back to raw image fields:",
+						e
+					);
+				}
+
+				// Fallbacks in case NDVI GeoTIFF URL isn't available
+					if (!imageUrl) {
+						imageUrl =
+							firstImage?.s3_output ||
+							firstImage?.visual_url ||
+							firstImage?.url ||
+							"";
+					}
+					acquisitionDate = extractImageDate(firstImage) || new Date().toISOString();
+					cloudCoverage = extractCloudCover(firstImage) ?? 0;
+				} else {
+					// Fallback: search for images if results array is empty
+					const searchResponse = await api.searchSentinelImages({
 					latitude: selectedArea.center.lat,
 					longitude: selectedArea.center.lng,
 					startDate: ndviConfig.dateRange.start,
@@ -595,20 +795,17 @@ export default function NDVIImagePanel({
 				const searchImages = searchResponse?.images || [];
 				if (searchImages.length > 0) {
 					firstImage = searchImages[0];
-					imageUrl =
-						firstImage?.assets?.visual ||
-						firstImage?.assets?.red ||
-						firstImage?.visual_url ||
-						firstImage?.url ||
-						"";
-					acquisitionDate =
-						firstImage?.date ||
-						firstImage?.acquisition_date ||
-						new Date().toISOString();
-					cloudCoverage =
-						firstImage?.cloudCover || firstImage?.cloud_cover || 0;
+						imageUrl =
+							firstImage?.assets?.visual ||
+							firstImage?.assets?.red ||
+							firstImage?.visual_url ||
+							firstImage?.url ||
+							"";
+						acquisitionDate =
+							extractImageDate(firstImage) || new Date().toISOString();
+						cloudCoverage = extractCloudCover(firstImage) ?? 0;
+					}
 				}
-			}
 
 			const ndviData: NDVIImageData = {
 				id: `ndvi-${Date.now()}`,
@@ -642,14 +839,31 @@ export default function NDVIImagePanel({
 
 		const selectedImg = currentImage.availableImages[imageIndex];
 
-		// Handle different image structures (from results array or search response)
-		const imageUrl =
-			selectedImg?.s3_output ||
-			selectedImg?.assets?.visual ||
-			selectedImg?.assets?.red ||
-			selectedImg?.visual_url ||
-			selectedImg?.url ||
-			"";
+		// Prefer backend-signed NDVI GeoTIFF URL for each selected timeline image.
+		let imageUrl = "";
+		const regionId =
+			selectedRegion?.id || selectedArea?.id || currentImage?.area?.id || "";
+		if (regionId && selectedImg?.imageId) {
+			try {
+				imageUrl = await api.getNdviImageUrl(regionId, selectedImg.imageId);
+			} catch (error) {
+				console.error(
+					`Failed to fetch signed NDVI URL for ${selectedImg.imageId}:`,
+					error
+				);
+			}
+		}
+
+		// Fallback for non-NDVI payload structures.
+		if (!imageUrl) {
+			imageUrl =
+				selectedImg?.s3_output ||
+				selectedImg?.assets?.visual ||
+				selectedImg?.assets?.red ||
+				selectedImg?.visual_url ||
+				selectedImg?.url ||
+				"";
+		}
 
 		// Set loading state for this specific image
 		setLoadingImages((prev) => new Set(prev).add(imageIndex));
@@ -657,54 +871,45 @@ export default function NDVIImagePanel({
 		// Check if we already have this image processed
 		const cachedUrl = processedImageCache.get(imageUrl);
 
-		let updatedImage;
+			let updatedImage;
+			const selectedImageDate =
+				extractImageDate(selectedImg) || currentImage.metadata.acquisition_date;
+			const selectedImageCloudCover =
+				extractCloudCover(selectedImg) ?? currentImage.metadata.cloud_coverage;
+			const selectedNdviStats = extractImageNdviStats(selectedImg);
 
-		// If this is from results array, use the NDVI statistics directly
-		if (selectedImg?.ndvi_statistics) {
-			// This is a result from the analysis response
-			const ndviStats = selectedImg.ndvi_statistics;
-			const statistics = currentImage.stats || {};
+			// If NDVI stats exist on the selected image, update cards/banner from that image.
+			if (selectedNdviStats) {
+				const statistics = currentImage.stats || {};
 
-			updatedImage = {
-				...currentImage,
-				url: imageUrl,
-				metadata: {
-					...currentImage.metadata,
-					acquisition_date:
-						selectedImg.date ||
-						selectedImg.acquisition_date ||
-						currentImage.metadata.acquisition_date,
-					cloud_coverage:
-						selectedImg.cloudCover ||
-						selectedImg.cloud_cover ||
-						currentImage.metadata.cloud_coverage,
-				},
-				stats: {
-					...statistics,
-					mean_ndvi: ndviStats.mean || statistics.mean_ndvi,
-					min_ndvi: ndviStats.min || statistics.min_ndvi,
-					max_ndvi: ndviStats.max || statistics.max_ndvi,
-					std_ndvi: ndviStats.std || statistics.std_ndvi,
-				},
-			};
-		} else {
-			// Fallback: use current stats, just update image URL
-			updatedImage = {
-				...currentImage,
-				url: imageUrl,
-				metadata: {
-					...currentImage.metadata,
-					acquisition_date:
-						selectedImg.date ||
-						selectedImg.acquisition_date ||
-						currentImage.metadata.acquisition_date,
-					cloud_coverage:
-						selectedImg.cloudCover ||
-						selectedImg.cloud_cover ||
-						currentImage.metadata.cloud_coverage,
-				},
-			};
-		}
+				updatedImage = {
+					...currentImage,
+					url: imageUrl,
+					metadata: {
+						...currentImage.metadata,
+						acquisition_date: selectedImageDate,
+						cloud_coverage: selectedImageCloudCover,
+					},
+					stats: {
+						...statistics,
+						mean_ndvi: selectedNdviStats.mean ?? statistics.mean_ndvi,
+						min_ndvi: selectedNdviStats.min ?? statistics.min_ndvi,
+						max_ndvi: selectedNdviStats.max ?? statistics.max_ndvi,
+						std_ndvi: selectedNdviStats.std ?? statistics.std_ndvi,
+					},
+				};
+			} else {
+				// Fallback: use current stats, just update image URL
+				updatedImage = {
+					...currentImage,
+					url: imageUrl,
+					metadata: {
+						...currentImage.metadata,
+						acquisition_date: selectedImageDate,
+						cloud_coverage: selectedImageCloudCover,
+					},
+				};
+			}
 
 		setCurrentImage(updatedImage);
 		setSelectedImageIndex(imageIndex);
@@ -729,6 +934,14 @@ export default function NDVIImagePanel({
 		setCurrentImage(null);
 		setSelectedImageIndex(0);
 		setError(null);
+		setLoadingImages(new Set());
+
+		// Clear cached visual selection immediately for remount scenarios.
+		ndviPanelRuntimeCache = {
+			...ndviPanelRuntimeCache,
+			currentImage: null,
+			selectedImageIndex: 0,
+		};
 	};
 
 	const handleConfigChange = (key: keyof NDVIConfig, value: any) => {
@@ -996,9 +1209,9 @@ export default function NDVIImagePanel({
 											</span>
 										</div>
 
-										<div className="relative">
-											{/* Timeline line */}
-											<div className="absolute top-6 left-4 right-4 h-0.5 bg-gray-300"></div>
+											<div className="relative">
+												{/* Timeline line */}
+												<div className="absolute top-[6px] left-4 right-4 h-0.5 bg-gray-300 z-0"></div>
 
 											{/* Timeline items */}
 											<div className="flex justify-between relative">
@@ -1008,22 +1221,16 @@ export default function NDVIImagePanel({
 														const isSelected = idx === selectedImageIndex;
 														const isLoading = loadingImages.has(idx);
 
-														// Handle different image structures (results array vs search response)
-														const imageDate =
-															img.date || img.acquisition_date || img.timestamp;
-														const date = imageDate
-															? new Date(imageDate)
-															: new Date();
-														const cloudCover =
-															img.cloudCover || img.cloud_cover || 0;
-														const imageId =
-															img.imageId || img.id || `timeline-item-${idx}`;
+															// Handle different image structures (results array vs search response)
+															const imageDate =
+																extractImageDate(img) ||
+																new Date().toISOString();
+															const date = new Date(imageDate);
+															const imageId =
+																img.imageId || img.id || `timeline-item-${idx}`;
 
-														// Show NDVI mean if available (from results array)
-														const ndviMean = img.ndvi_statistics?.mean;
-
-														return (
-															<button
+															return (
+																<button
 																key={imageId}
 																onClick={() => handleImageSelect(idx)}
 																disabled={isLoading}
@@ -1037,13 +1244,13 @@ export default function NDVIImagePanel({
 																		: ""
 																}`}
 															>
-																<div
-																	className={`w-3 h-3 rounded-full border-2 transition-all duration-200 relative ${
-																		isSelected
-																			? "bg-green-500 border-green-500 shadow-lg"
-																			: "bg-white border-gray-300 group-hover:border-green-400"
-																	}`}
-																>
+																	<div
+																		className={`w-3 h-3 rounded-full border-2 transition-all duration-200 relative ${
+																			isSelected
+																				? "bg-green-500 border-green-500 shadow-lg"
+																				: "bg-white border-gray-300 group-hover:border-green-400"
+																		} z-10`}
+																	>
 																	{isLoading && (
 																		<div className="absolute inset-0 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
 																	)}
@@ -1064,36 +1271,19 @@ export default function NDVIImagePanel({
 																					day: "numeric",
 																			  })}
 																	</div>
-																	{!isLoading && (
-																		<div
-																			className={`text-xs ${
-																				isSelected
-																					? "text-green-600"
-																					: "text-gray-500"
-																			}`}
-																		>
-																			{cloudCover > 0 &&
-																				`${cloudCover.toFixed(0)}% ☁️`}
-																			{ndviMean !== undefined && (
-																				<span className="ml-1">
-																					NDVI: {ndviMean.toFixed(2)}
-																				</span>
-																			)}
-																		</div>
-																	)}
-																</div>
-															</button>
-														);
+																	</div>
+																</button>
+															);
 													})}
 											</div>
 										</div>
 									</div>
 								)}
 
-							{/* Image Display */}
-							<div className="flex-1 p-4 bg-gray-100">
-								<div className="h-full w-full max-w-7xl mx-auto">
-									<TiffImageViewer
+								{/* Image Display */}
+								<div className="flex-1 p-4 bg-gray-100">
+									<div className="h-full w-full max-w-7xl mx-auto">
+										<TiffImageViewer
 										tiffUrl={currentImage.url}
 										alt="Sentinel-2 Satellite Image"
 										className="rounded-lg"
@@ -1103,11 +1293,28 @@ export default function NDVIImagePanel({
 										onImageProcessed={handleImageProcessed}
 										onLoad={handleImageLoadComplete}
 									/>
+									</div>
 								</div>
-							</div>
 
-							{/* Action Bar */}
-							<div className="p-4 border-t bg-gray-50 flex justify-between items-center">
+								{/* NDVI Summary Banner */}
+								<div className="px-4 py-3 border-t border-b bg-emerald-50 text-emerald-900">
+									<div className="flex flex-wrap items-center gap-4 text-sm">
+										<span className="font-semibold">
+											NDVI: {(currentImage.stats.mean_ndvi ?? 0).toFixed(3)}
+										</span>
+										<span>
+											Vegetation Coverage:{" "}
+											{(currentImage.stats.vegetation_percentage ?? 0).toFixed(1)}%
+										</span>
+										<span>
+											Range: {(currentImage.stats.min_ndvi ?? -1).toFixed(3)} to{" "}
+											{(currentImage.stats.max_ndvi ?? 1).toFixed(3)}
+										</span>
+									</div>
+								</div>
+
+								{/* Action Bar */}
+								<div className="p-4 border-t bg-gray-50 flex justify-between items-center">
 								<div className="text-sm text-gray-600">
 									Region:{" "}
 									<span className="font-medium">{currentImage.area.name}</span>
