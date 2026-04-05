@@ -459,6 +459,7 @@ export default function NDVIImagePanel({
 	);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [info, setInfo] = useState<string | null>(null);
 	const [loadingStep, setLoadingStep] = useState("");
 	const [loadingProgress, setLoadingProgress] = useState(0);
 	const [showSettings, setShowSettings] = useState(
@@ -573,6 +574,7 @@ export default function NDVIImagePanel({
 
 		setIsLoading(true);
 		setError(null);
+		setInfo(null);
 		setLoadingProgress(0);
 
 		try {
@@ -601,8 +603,8 @@ export default function NDVIImagePanel({
 			const workflowStatus = analysisResponse?.workflow_status || "UNKNOWN";
 
 			if (workflowStatus === "NO_IMAGES_FOUND") {
-				setError(
-					"No satellite images found for the selected criteria. Try adjusting the date range or cloud cover threshold."
+				setInfo(
+					"No satellite images were found for the selected area and date range. This usually happens during monsoon/rainy seasons when cloud cover is high. Try a different date range (Oct–Feb for clearer skies) or increase the cloud cover threshold."
 				);
 				return;
 			}
@@ -617,7 +619,7 @@ export default function NDVIImagePanel({
 			}
 
 			if (workflowStatus !== "COMPLETED") {
-				setError(`Analysis status: ${workflowStatus}. Please try again.`);
+				setInfo(`The analysis returned with status "${workflowStatus}". This may indicate the pipeline is still processing or encountered an unexpected condition. Please try again in a few moments.`);
 				return;
 			}
 
@@ -927,6 +929,7 @@ export default function NDVIImagePanel({
 
 	const handleRetry = () => {
 		setError(null);
+		setInfo(null);
 		handleGenerateNDVI();
 	};
 
@@ -1144,12 +1147,38 @@ export default function NDVIImagePanel({
 					</div>
 				)}
 
-				{/* Error State */}
+				{/* Info State - non-error alerts */}
+				{info && !error && (
+					<div className="p-4 bg-amber-50 border-b border-amber-200">
+						<div className="flex items-center justify-between">
+							<div className="flex items-center gap-3">
+								<div className="text-amber-500 text-xl">📡</div>
+								<div>
+									<div className="text-amber-800 font-medium">
+										No Results Available
+									</div>
+									<div className="text-amber-700 text-sm">{info}</div>
+								</div>
+							</div>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={handleRetry}
+								className="bg-amber-100 hover:bg-amber-200 text-amber-800 border-amber-300"
+							>
+								<RefreshCw size={14} className="mr-2" />
+								Try Again
+							</Button>
+						</div>
+					</div>
+				)}
+
+				{/* Error State - actual failures */}
 				{error && (
 					<div className="p-4 bg-red-50 border-b border-red-200">
 						<div className="flex items-center justify-between">
 							<div className="flex items-center gap-3">
-								<div className="text-red-500">⚠️</div>
+								<div className="text-red-500 text-xl">⚠️</div>
 								<div>
 									<div className="text-red-800 font-medium">
 										Analysis Failed
